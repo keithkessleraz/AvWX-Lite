@@ -128,3 +128,6 @@ dist
 
 # Vite cache directory
 .vite
+
+# Local Netlify folder
+.netlify
