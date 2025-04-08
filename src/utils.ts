@@ -301,19 +301,20 @@ export function processMetarData(
   )
 
   return {
-    airportName: metar.station?.name || 'Unknown Station',
+    airportName: metar.station?.name || metar.icao,
+    rawText: metar.raw_text || 'N/A',
     icao: metar.icao,
     observedTime: formatObservedTime(metar.observed),
     reportAgeMinutes: calculateReportAge(metar.observed),
     flightCategory: metar.flight_category || flightCategory, // Prefer API's category if available
-    rawMetar: metar.raw_text,
     wind: formatWind(metar.wind),
     visibility: formatVisibility(metar.visibility),
     ceilingAndClouds: formatCeilingAndClouds(metar.ceiling, metar.clouds),
     temperature: formatTempDew(metar.temperature),
     dewpoint: formatTempDew(metar.dewpoint),
     altimeter: formatAltimeter(metar.barometer),
-    remarks: decodeRemarks(metar.remarks)
+    remarks: decodeRemarks(metar.remarks),
+    rawMetar: metar.raw_text || 'Raw text not available'
   }
 }
 

@@ -127,6 +127,7 @@ export interface CheckWxFlightCategoryResponse {
 // --- Internal Decoded Data Structure ---
 export interface DecodedMetar {
   airportName: string;
+  rawText: string; // Add the raw METAR string
   icao: string;
   observedTime: string; // Formatted string
   reportAgeMinutes: number;
