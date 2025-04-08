@@ -5,56 +5,46 @@ import type {
   Coordinates
 } from './types'
 
-const BASE_URL = 'https://api.checkwx.com'
-const API_KEY = import.meta.env.VITE_CHECKWX_API_KEY
+// Define the proxy base URL
+const PROXY_BASE_URL = '/.netlify/functions/checkwx-proxy';
 
-async function fetchCheckWx<T>(endpoint: string): Promise<T> {
-  if (!API_KEY || API_KEY === 'YOUR_CHECKWX_API_KEY_HERE') {
-    throw new Error(
-      'CheckWX API Key is missing. Please set VITE_CHECKWX_API_KEY in your .env file.'
-    )
-  }
-
-  const url = `${BASE_URL}${endpoint}`
-  const headers = {
-    'X-API-Key': API_KEY,
-    Accept: 'application/json'
-  }
+// Function to fetch data via the Netlify proxy
+async function fetchViaProxy<T extends object>(checkWxEndpoint: string): Promise<T> {
+  // Construct the proxy URL, encoding the target CheckWX endpoint
+  const proxyUrl = `${PROXY_BASE_URL}?endpoint=${encodeURIComponent(checkWxEndpoint)}`;
+  console.log(`Fetching via Proxy: ${proxyUrl} (targeting ${checkWxEndpoint})`); // Log proxy URL and target
 
   try {
-    const response = await fetch(url, { headers })
+    const response = await fetch(proxyUrl); // Make the request to the proxy function
 
     if (!response.ok) {
-      let errorData: any = { message: `HTTP error! status: ${response.status}` }
+      // Attempt to get error details from the proxy response
+      let errorData;
       try {
-        // Try to parse error details from CheckWX if available
-        errorData = await response.json()
+        errorData = await response.json();
       } catch (e) {
-        // Ignore if error response is not JSON
+        // Ignore if response body isn't JSON
       }
-      throw new Error(
-        `API Error: ${errorData?.error || response.statusText || errorData.message}`
-      )
+      const errorMessage = errorData?.error || `Proxy request failed with status: ${response.status} ${response.statusText}`;
+      console.error('Proxy fetch error:', errorMessage, 'Status:', response.status);
+      throw new Error(errorMessage);
     }
 
-    const data: T = await response.json()
-    // CheckWX specific check for no results
-    if ('results' in data && data.results === 0) {
-      // Distinguish between no METAR and no Station
-      if (endpoint.includes('/metar/')) {
-        throw new Error('No METAR data found for this station.')
-      } else if (endpoint.includes('/station/')) {
-        throw new Error('No stations found for the given coordinates.')
-      }
+    const data: T = await response.json(); // Parse the JSON response from the proxy
+
+    // Check for CheckWX API specific errors like { results: 0 }
+    // CheckWX often returns data: [] for no results, but let's keep a check for the results property if it exists
+    if (typeof data === 'object' && data !== null && 'results' in data && (data as any).results === 0) {
+        console.warn(`CheckWX API returned 0 results via proxy for endpoint: ${checkWxEndpoint}`);
+        // Depending on expected behavior, you might return data or throw an error
+        // throw new Error(`No results found via proxy for: ${checkWxEndpoint}`);
     }
-    return data
+
+    return data; // Return the data from the CheckWX API (passed through the proxy)
   } catch (error) {
-    console.error('Fetch CheckWX Error:', error)
-    if (error instanceof Error) {
-      throw error // Re-throw known errors
-    } else {
-      throw new Error('An unknown network error occurred.') // Wrap unknown errors
-    }
+    console.error(`Error fetching via proxy for endpoint ${checkWxEndpoint}:`, error);
+    // Re-throw the error to be caught by the calling function
+    throw error;
   }
 }
 
@@ -63,36 +53,40 @@ async function fetchCheckWx<T>(endpoint: string): Promise<T> {
  * @param icao - The ICAO airport identifier.
  * @returns Promise resolving to the CheckWxMetarResponse.
  */
-export function fetchMetar(icao: string): Promise<CheckWxMetarResponse> {
+export async function fetchMetar(icao: string): Promise<CheckWxMetarResponse> {
   if (!icao || icao.length < 3 || icao.length > 4) {
     return Promise.reject(new Error('Invalid ICAO code format.'))
   }
   const endpoint = `/metar/${icao.toUpperCase()}/decoded`
-  return fetchCheckWx<CheckWxMetarResponse>(endpoint)
+  return fetchViaProxy<CheckWxMetarResponse>(endpoint)
 }
 
 /**
- * Fetches nearby stations based on latitude and longitude.
+ * Fetches nearby stations based on coordinates via proxy
  * @param coords - The coordinates (latitude, longitude).
  * @param radius - The search radius in miles.
  * @param filter - Optional filter parameter ('A', 'H', 'G', 'S', 'W', 'O').
  * @returns Promise resolving to the CheckWxStationResponse.
  */
-export function fetchNearbyStations(
+export async function fetchNearbyStations(
   coords: Coordinates,
   radius: number = 50, // Default radius
-  filter?: 'A' | 'H' | 'G' | 'S' | 'W' | 'O' // Optional filter parameter
+  filter: 'A' | 'H' | 'G' | 'S' | 'W' | 'O' = 'A' // Default filter 'A'
 ): Promise<CheckWxStationResponse> {
-  const { latitude, longitude } = coords
-  let endpoint = `/station/lat/${latitude}/lon/${longitude}/radius/${radius}`
+  // Correct CheckWX endpoint structure
+  let endpoint = `/station/lat/${coords.latitude}/lon/${coords.longitude}/radius/${radius}`;
   if (filter) {
-    endpoint += `?filter=${filter}`
+    endpoint += `?filter=${filter}`;
   }
-  return fetchCheckWx<CheckWxStationResponse>(endpoint)
+  return fetchViaProxy<CheckWxStationResponse>(endpoint);
 }
 
-// Function to fetch flight category for a single ICAO from CheckWX API
-export function fetchFlightCategory(icao: string): Promise<CheckWxFlightCategoryResponse> {
+// Function to fetch flight category for a single ICAO via proxy
+export async function fetchFlightCategory(icao: string): Promise<CheckWxFlightCategoryResponse> { // Use specific response type
+   if (!icao || icao.length < 3 || icao.length > 4) {
+    return Promise.reject(new Error('Invalid ICAO code format.'))
+  }
+  // Correct CheckWX endpoint structure
   const endpoint = `/metar/${icao}/flight/category`;
-  return fetchCheckWx<CheckWxFlightCategoryResponse>(endpoint);
+  return fetchViaProxy<CheckWxFlightCategoryResponse>(endpoint);
 }

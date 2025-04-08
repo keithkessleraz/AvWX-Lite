@@ -1,6 +1,7 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions" # Add this line
 
 [build.environment]
   NODE_VERSION = "18" # Specify Node.js version
