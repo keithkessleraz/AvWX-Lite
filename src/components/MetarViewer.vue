@@ -27,7 +27,8 @@ import {
 } from 'naive-ui'
 import {
   LocationOutline as LocationIcon,
-} from '@vicons/ionicons5'
+  AirplaneOutline as AirplaneIcon // Import Airplane icon
+} from '@vicons/ionicons5' // Corrected import
 import {
   fetchMetar,
   fetchNearbyStations,
@@ -170,7 +171,11 @@ const getLocationAndFindNearby = async () => {
       showNearbyAirports.value = true; 
     }
   } catch (error: any) {
-    console.error('Error fetching nearby stations:', error); 
+    console.error(
+      'Error during nearby stations process (geolocation or fetch):', // Clarified message
+      error instanceof Error ? error.message : 'Non-Error object caught',
+      error // Log the full error object/details for inspection
+    );
     if (error.code === error.PERMISSION_DENIED) {
       errorMessage.value = 'Geolocation permission denied.';
     } else if (error.code === error.POSITION_UNAVAILABLE) {
@@ -252,14 +257,18 @@ onMounted(() => {
          <n-list hoverable clickable bordered>
             <n-list-item v-for="airport in nearbyAirports" :key="airport.icao" style="cursor: pointer;" @click="handleAirportSelect(airport.icao)">
               <template #prefix>
-                <n-tag size="small" :type="getFlightCategoryTagType(airport.flightCategory)" style="margin-right: 8px;">
+                <n-tag size="tiny" :type="getFlightCategoryTagType(airport.flightCategory)" style="margin-right: 8px;">
                   {{ airport.flightCategory || 'N/A' }}
                 </n-tag>
               </template>
               <n-thing :title="`${airport.name} (${airport.icao})`">
+                <template #header>
+                  <span style="font-size: 0.9em;">{{ airport.name }} ({{ airport.icao }})</span>
+                </template>
                 <template #description>
-                  {{ airport.position.distance.miles.toFixed(1) }} miles away -
-                  {{ airport.city }}, {{ airport.state?.name || airport.country.code }}
+                  <span style="font-size: 0.9em;">
+                    {{ airport.position.distance.miles.toFixed(1) }} miles away - {{ airport.city }}, {{ airport.state?.name || airport.country.code }}
+                  </span>
                 </template>
               </n-thing>
             </n-list-item>
@@ -272,60 +281,79 @@ onMounted(() => {
       </div>
 
       <div v-else-if="metarData && !isFetching">
-         <n-divider title-placement="left">
-           {{ metarData.airportName }} ({{ metarData.icao }})
-           <n-tag size="small" :type="getFlightCategoryTagType(metarData.flightCategory)" style="margin-left: 10px;">
-             {{ metarData.flightCategory }}
-           </n-tag>
-           <n-tag type="info" size="small" style="margin-left: 5px;"> Reported {{ metarData.reportAgeMinutes }} minutes ago </n-tag>
-         </n-divider>
+        <!-- Use a <p> tag for the header instead of n-divider -->
+        <!-- DEBUG: Simplified header with hardcoded text and explicit color -->
+        <p style="display: flex; align-items: center; font-size: 1.2em; gap: 6px; margin-bottom: 10px; font-weight: 500;">
+          <n-icon :component="AirplaneIcon" size="22" />
+          <span>{{ metarData.airportName || 'Unknown Station' }} ({{ metarData.icao }})</span>
+        </p>
+ 
+        <!-- Flight Category and Report Age Tags -->
+        <div style="display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;">
+          <n-tag v-if="metarData.flightCategory" :type="getFlightCategoryTagType(metarData.flightCategory)" size="small">
+            {{ metarData.flightCategory }}
+          </n-tag>
+          <n-tag v-if="metarData.reportAgeMinutes !== undefined" type="default" size="small" :bordered="false">
+            Reported {{ metarData.reportAgeMinutes }} mins ago
+          </n-tag>
+        </div>
+ 
+        <n-divider v-if="isMobile" style="margin-top: 15px; margin-bottom: 5px;" />
+ 
+        <n-card
+          v-if="metarData.rawText"
+          size="small"
+          embedded
+          class="raw-metar-card"
+          :style="{ marginBottom: '15px' }"
+        >
+          <code>{{ metarData.rawText }}</code>
+        </n-card>
 
-         <n-divider v-if="isMobile" style="margin-top: 15px; margin-bottom: 5px;" />
+        <n-descriptions
+          label-placement="left"
+          bordered
+          :column="isMobile ? 1 : 2"
+          size="medium"
+        >
+          <n-descriptions-item label="Observed">
+            {{ metarData.observedTime }}
+          </n-descriptions-item>
+          <n-descriptions-item label="Wind">
+            {{ metarData.wind }}
+          </n-descriptions-item>
+          <n-descriptions-item label="Visibility">
+            {{ metarData.visibility }}
+          </n-descriptions-item>
+          <n-descriptions-item label="Ceiling & Clouds">
+            {{ metarData.ceilingAndClouds }}
+          </n-descriptions-item>
+          <n-descriptions-item label="Temperature">
+            {{ metarData.temperature }}
+          </n-descriptions-item>
+          <n-descriptions-item label="Dewpoint">
+            {{ metarData.dewpoint }}
+          </n-descriptions-item>
+          <n-descriptions-item label="Altimeter">
+            {{ metarData.altimeter }}
+          </n-descriptions-item>
+        </n-descriptions>
 
-         <n-descriptions
-           label-placement="left"
-           bordered
-           :column="isMobile ? 1 : 2"
-           size="medium"
-         >
-           <n-descriptions-item label="Observed">
-             {{ metarData.observedTime }}
-           </n-descriptions-item>
-           <n-descriptions-item label="Wind">
-             {{ metarData.wind }}
-           </n-descriptions-item>
-           <n-descriptions-item label="Visibility">
-             {{ metarData.visibility }}
-           </n-descriptions-item>
-           <n-descriptions-item label="Ceiling & Clouds">
-             {{ metarData.ceilingAndClouds }}
-           </n-descriptions-item>
-           <n-descriptions-item label="Temperature">
-             {{ metarData.temperature }}
-           </n-descriptions-item>
-           <n-descriptions-item label="Dewpoint">
-             {{ metarData.dewpoint }}
-           </n-descriptions-item>
-           <n-descriptions-item label="Altimeter">
-             {{ metarData.altimeter }}
-           </n-descriptions-item>
-         </n-descriptions>
-
-         <div v-if="metarData.remarks.plainLanguage !== 'No Remarks'" style="margin-top: 20px;">
-             <n-descriptions label-placement="top" bordered :column="1" size="small">
-                 <n-descriptions-item label="Remarks">
-                     <n-code language="plaintext" :hljs="undefined" :code="metarData.remarks.plainLanguage" word-wrap></n-code>
-                     <div v-if="Object.keys(metarData.remarks.decoded).length > 0" style="margin-top: 10px;">
-                         <strong>Decoded Elements:</strong>
-                         <ul>
-                             <li v-for="(value, key) in metarData.remarks.decoded" :key="key">
-                                 <strong>{{ key }}:</strong> {{ value }}
-                             </li>
-                         </ul>
-                     </div>
-                 </n-descriptions-item>
-             </n-descriptions>
-         </div>
+        <div v-if="metarData.remarks.plainLanguage !== 'No Remarks'" style="margin-top: 20px;">
+            <n-descriptions label-placement="top" bordered :column="1" size="small">
+                <n-descriptions-item label="Remarks">
+                    <n-code language="plaintext" :hljs="undefined" :code="metarData.remarks.plainLanguage" word-wrap></n-code>
+                    <div v-if="Object.keys(metarData.remarks.decoded).length > 0" style="margin-top: 10px;">
+                        <strong>Decoded Elements:</strong>
+                        <ul>
+                            <li v-for="(value, key) in metarData.remarks.decoded" :key="key">
+                                <strong>{{ key }}:</strong> {{ value }}
+                            </li>
+                        </ul>
+                    </div>
+                </n-descriptions-item>
+            </n-descriptions>
+        </div>
       </div>
     </n-space>
   </n-card>
@@ -356,5 +384,10 @@ ul {
 }
 li {
     margin-bottom: 3px;
+}
+
+/* Nearby Stations List */
+.nearby-stations-list {
+  margin-top: 20px;
 }
 </style>
