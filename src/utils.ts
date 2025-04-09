@@ -2,7 +2,6 @@ import type {
   CheckWxMetar,
   CheckWxBarometer,
   DecodedMetar,
-  DecodedRemarks,
   FlightCategory
 } from './types'
 
@@ -128,7 +127,7 @@ function formatCeilingAndClouds(
     clouds.forEach((layer) => {
       let layerStr = layer.text // e.g., "Scattered"
       if (layer.base_feet_agl) {
-        layerStr += ` at ${layer.base_feet_agl} ft AGL`
+        layerStr += ` at ${formatAltitude(layer.base_feet_agl)} AGL`
       }
       reportedLayers.push(layerStr)
     })
@@ -136,7 +135,7 @@ function formatCeilingAndClouds(
 
   if (ceiling && ceiling.base_feet_agl) {
     // Check if ceiling layer is already in clouds list to avoid duplication
-    const ceilingDesc = `${ceiling.text} at ${ceiling.base_feet_agl} ft AGL (Ceiling)`
+    const ceilingDesc = `${ceiling.text} at ${formatAltitude(ceiling.base_feet_agl)} AGL (Ceiling)`
     if (
       !reportedLayers.some((l) =>
         l.includes(`${ceiling.base_feet_agl} ft AGL`)
@@ -158,7 +157,7 @@ function formatCeilingAndClouds(
     cloudsStr = reportedLayers.join('; ')
   } else if (ceiling) {
     // Handle cases where only ceiling is reported, though unusual
-    cloudsStr = `${ceiling.text} at ${ceiling.base_feet_agl} ft AGL (Ceiling)`
+    cloudsStr = `${ceiling.text} at ${formatAltitude(ceiling.base_feet_agl)} AGL (Ceiling)`
   }
 
   // CheckWX might also return specific codes like NSC (No Significant Cloud) or CAVOK
@@ -219,68 +218,46 @@ function determineFlightCategory(
   return 'Unknown' // Should not happen with valid data
 }
 
-/**
- * Basic METAR remarks decoder.
- * This is a simplified version and might not cover all possible remarks.
- * @param remarksString Raw remarks string from METAR.
- * @returns DecodedRemarks object.
- */
-function decodeRemarks(remarksString: string | undefined): DecodedRemarks {
-  const decoded: { [key: string]: string } = {}
-  const plainLanguage = remarksString || 'No Remarks'
+// Helper to format Humidity
+function formatHumidity(percent: number | undefined): string {
+  if (percent === undefined || percent === null) {
+    return 'N/A';
+  }
+  return `${percent.toFixed(0)}%`;
+}
 
-  if (!remarksString) {
-    return { plainLanguage, decoded }
+// Helper to calculate Density Altitude
+function calculateDensityAltitude(elevationFt: number | undefined, tempC: number | undefined, altimeterHg: number | undefined): string {
+  // Ensure all inputs are valid numbers before proceeding
+  if (elevationFt === undefined || tempC === undefined || altimeterHg === undefined ||
+      isNaN(elevationFt) || isNaN(tempC) || isNaN(altimeterHg)) {
+    return 'N/A'; // Need all inputs
   }
 
-  const parts = remarksString.split(' ')
+  // Assign to constants after check to satisfy TS
+  const elev = elevationFt;
+  const temp = tempC;
+  const altHg = altimeterHg;
 
-  for (const part of parts) {
-    if (part === 'AO1') {
-      decoded.AutomatedObservationType = 'Automated station without precipitation discriminator'
-    } else if (part === 'AO2') {
-      decoded.AutomatedObservationType = 'Automated station with precipitation discriminator'
-    } else if (part.startsWith('SLP')) {
-      // Sea Level Pressure (e.g., SLP123 -> 1012.3 hPa)
-      const slpDigits = part.substring(3)
-      if (/^\d+$/.test(slpDigits)) {
-        const pressureValue = parseInt(slpDigits, 10)
-        const hpa = pressureValue / 10 + (pressureValue < 500 ? 1000 : 900)
-        decoded.SeaLevelPressure = `${hpa.toFixed(1)} hPa`
-      } else {
-        decoded.SeaLevelPressure = `Unknown format (${part})`
-      }
-    } else if (part.startsWith('T') && part.length === 9) {
-      // Precise Temperature/Dewpoint (e.g., T01280067)
-      // T[sign][temp C * 10][sign][dew C * 10]
-      const tempSign = part[1] === '1' ? '-' : ''
-      const tempVal = parseInt(part.substring(2, 5), 10) / 10
-      const dewSign = part[5] === '1' ? '-' : ''
-      const dewVal = parseInt(part.substring(6, 9), 10) / 10
-      decoded.PreciseTempDewpoint = `Temp: ${tempSign}${tempVal.toFixed(1)}°C, Dewpoint: ${dewSign}${dewVal.toFixed(1)}°C`
-    } else if (part.match(/^PK WND (\d{3})(\d{2,3})\/(\d{2})(\d{2})$/)) {
-      // Peak Wind (e.g., PK WND 28045/1515)
-      const match = part.match(/^PK WND (\d{3})(\d{2,3})\/(\d{2})(\d{2})$/)
-      if (match) {
-        decoded.PeakWind = `Peak wind ${match[1]}° at ${match[2]} knots occurred at ${match[3]}${match[4]} Zulu`
-      }
-    } else if (part.match(/^VIS (\d+\/?\d*V\d+\/?\d*)$/)) {
-      // Variable Visibility (e.g., VIS 1/2V2)
-       const match = part.match(/^VIS (\d+\/?\d*V\d+\/?\d*)$/)
-       if (match) {
-         decoded.VariableVisibility = `Visibility variable between ${match[1].replace('V', ' and ')} statute miles`
-       }
-    }
-    // Add more common remark decoders here...
-    // e.g., PRESRR/PRESFR (Pressure Rising/Falling Rapidly)
-    // e.g., TSNO (Thunderstorm information not available)
-    // e.g., Pxxxx (Hourly precipitation amount)
-    // e.g., 6xxxx (3/6 hour precipitation amount)
-    // e.g., RVRNO (Runway Visual Range not available)
-    // e.g., WSHFT (Wind Shift)
+  // Pressure Altitude Calculation (approximation)
+  const standardPressureHg = 29.92;
+  const pressureAltitude = elev + (standardPressureHg - altHg) * 1000;
+
+  // ISA Temperature Calculation (at pressure altitude)
+  const isaTempC = 15 - (1.98 * (pressureAltitude / 1000)); // ~2C drop per 1000ft
+
+  // Density Altitude Calculation
+  const densityAltitude = pressureAltitude + (120 * (temp - isaTempC));
+
+  return formatAltitude(Math.round(densityAltitude)); // Use helper and round
+}
+
+// Helper to format altitude numbers with commas and foot symbol
+function formatAltitude(feet: number | null | undefined): string {
+  if (typeof feet !== 'number' || isNaN(feet)) {
+    return 'N/A';
   }
-
-  return { plainLanguage, decoded }
+  return `${feet.toLocaleString('en-US')}'`;
 }
 
 /**
@@ -300,12 +277,25 @@ export function processMetarData(
     metar.ceiling
   )
 
+  const observedTime = formatObservedTime(metar.observed);
+  const reportAgeMinutes = calculateReportAge(metar.observed);
+
+  // Format Humidity
+  const humidity = formatHumidity(metar.humidity?.percent);
+
+  // Calculate Density Altitude
+  const densityAltitude = calculateDensityAltitude(
+    metar.elevation?.feet, // Use elevation from root METAR object
+    metar.temperature?.celsius,
+    metar.barometer?.hg
+  );
+
   return {
     airportName: metar.station?.name || metar.icao,
     rawText: metar.raw_text || 'N/A',
     icao: metar.icao,
-    observedTime: formatObservedTime(metar.observed),
-    reportAgeMinutes: calculateReportAge(metar.observed),
+    observedTime: observedTime,
+    reportAgeMinutes: reportAgeMinutes,
     flightCategory: metar.flight_category || flightCategory, // Prefer API's category if available
     wind: formatWind(metar.wind),
     visibility: formatVisibility(metar.visibility),
@@ -313,25 +303,35 @@ export function processMetarData(
     temperature: formatTempDew(metar.temperature),
     dewpoint: formatTempDew(metar.dewpoint),
     altimeter: formatAltimeter(metar.barometer),
-    remarks: decodeRemarks(metar.remarks),
+    humidity: humidity,        // Added
+    densityAltitude: densityAltitude, // Added
     rawMetar: metar.raw_text || 'Raw text not available'
   }
 }
 
 /**
- * Gets the color type for the Naive UI tag based on flight category.
+ * Gets the Naive UI tag type corresponding to a flight category.
+ * @param category The flight category string.
+ * @returns Naive UI tag type ('success', 'info', 'warning', 'error', 'default').
  */
-export function getFlightCategoryTagType(category: FlightCategory | string | null | undefined): 'success' | 'warning' | 'error' | 'info' {
-  switch (category?.toUpperCase()) {
+export function getFlightCategoryTagType(
+  category: FlightCategory | string | null | undefined
+): 'success' | 'info' | 'warning' | 'error' | 'default' {
+  if (!category) return 'default';
+
+  switch (category.toUpperCase()) {
     case 'VFR':
-      return 'success'
+      return 'success';
     case 'MVFR':
-      return 'warning' // Or maybe 'info' depending on preference
+      return 'info';
     case 'IFR':
-      return 'error'
+      return 'warning';
     case 'LIFR':
-      return 'error' // Often styled distinctly, but 'error' works
+      return 'error';
+    case 'UNKNOWN':
     default:
-      return 'info'
+      return 'default';
   }
 }
+
+// Add any other utility functions below

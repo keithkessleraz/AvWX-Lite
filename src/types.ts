@@ -21,6 +21,10 @@ export interface CheckWxMetar {
   barometer?: CheckWxBarometer;
   flight_category?: string; // VFR, MVFR, IFR, LIFR
   remarks?: string; // Raw remarks string
+  elevation?: {
+    feet: number;
+    meters: number;
+  };
   // Add other fields as needed from the API response
 }
 
@@ -139,12 +143,8 @@ export interface DecodedMetar {
   temperature: string;
   dewpoint: string;
   altimeter: string;
-  remarks: DecodedRemarks;
-}
-
-export interface DecodedRemarks {
-  plainLanguage: string; // Original remarks string
-  decoded: { [key: string]: string }; // Key-value pairs of decoded remarks
+  humidity: string;
+  densityAltitude: string;
 }
 
 export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'Unknown';
