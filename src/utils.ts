@@ -290,6 +290,12 @@ export function processMetarData(
     metar.barometer?.hg
   );
 
+  // Format Weather Conditions
+  let weatherString: string | undefined = undefined;
+  if (metar.conditions && metar.conditions.length > 0) {
+    weatherString = metar.conditions.map(cond => cond.text).join(', ');
+  }
+
   return {
     airportName: metar.station?.name || metar.icao,
     rawText: metar.raw_text || 'N/A',
@@ -304,6 +310,7 @@ export function processMetarData(
     dewpoint: formatTempDew(metar.dewpoint),
     altimeter: formatAltimeter(metar.barometer),
     humidity: humidity,        // Added
+    weather: weatherString, // Added
     densityAltitude: densityAltitude, // Added
     rawMetar: metar.raw_text || 'Raw text not available'
   }
@@ -314,23 +321,58 @@ export function processMetarData(
  * @param category The flight category string.
  * @returns Naive UI tag type ('success', 'info', 'warning', 'error', 'default').
  */
+export interface TagStyle {
+  type: 'success' | 'info' | 'warning' | 'error' | 'default';
+  style?: Record<string, string>;
+}
+
 export function getFlightCategoryTagType(
   category: FlightCategory | string | null | undefined
-): 'success' | 'info' | 'warning' | 'error' | 'default' {
-  if (!category) return 'default';
+): TagStyle {
+  const defaultStyle: TagStyle = { type: 'default' };
+  if (!category) return defaultStyle;
 
   switch (category.toUpperCase()) {
     case 'VFR':
-      return 'success';
+      return {
+        type: 'success',
+        style: {
+          backgroundColor: '#18a058', // Naive Green
+          color: 'white',
+          borderColor: '#18a058'
+        }
+      };
     case 'MVFR':
-      return 'info';
+      return {
+        type: 'info',
+        style: {
+          backgroundColor: '#2080f0', // Naive Blue
+          color: 'white',
+          borderColor: '#2080f0'
+        }
+      };
     case 'IFR':
-      return 'warning';
+      return {
+        type: 'error',
+        style: {
+          backgroundColor: '#d03050', // Naive Red
+          color: 'white',
+          borderColor: '#d03050'
+        }
+      };
     case 'LIFR':
-      return 'error';
+      // Custom style for Magenta
+      return {
+        type: 'error', // Base type
+        style: {
+          backgroundColor: 'magenta',
+          color: 'white',
+          borderColor: 'magenta'
+        }
+      };
     case 'UNKNOWN':
     default:
-      return 'default';
+      return defaultStyle;
   }
 }
 

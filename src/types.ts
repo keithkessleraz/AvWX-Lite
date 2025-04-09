@@ -145,6 +145,7 @@ export interface DecodedMetar {
   altimeter: string;
   humidity: string;
   densityAltitude: string;
+  weather?: string; // Added field for weather phenomena
 }
 
 export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'Unknown';
@@ -153,4 +154,9 @@ export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'Unknown';
 export interface Coordinates {
   latitude: number;
   longitude: number;
+}
+
+export interface TagStyle { // Define and export TagStyle
+  type: 'success' | 'info' | 'warning' | 'error' | 'default';
+  style?: Record<string, string>;
 }

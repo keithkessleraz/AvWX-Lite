@@ -42,7 +42,8 @@ import {
 import type {
   DecodedMetar,
   FlightCategory,
-  CheckWxNearbyStation
+  CheckWxNearbyStation,
+  TagStyle
 } from '../types';
 
 import WxVectorLogo from '../assets/WX Vector Clean.svg'; // Import the logo
@@ -77,6 +78,14 @@ const formattedClouds = computed(() => {
     .replace(/ AGL/g, '') // Remove trailing AGL
     .replace(/' /g, "'<br>"); // Add line breaks after altitude prime + space
   return clouds;
+});
+
+// Computed property for the main METAR tag type and style
+const mainMetarTagProps = computed((): TagStyle => {
+  if (!metarData.value || !metarData.value.flightCategory) {
+    return { type: 'default' };
+  }
+  return getFlightCategoryTagType(metarData.value.flightCategory);
 });
 
 // --- Theme Overrides for Naive UI ---
@@ -332,7 +341,7 @@ onMounted(() => {
           <n-list hoverable clickable bordered>
             <n-list-item v-for="airport in nearbyAirports" :key="airport.icao" style="cursor: pointer;" @click="handleAirportSelect(airport.icao)">
               <template #prefix>
-                <n-tag size="small" :bordered="false" :type="getFlightCategoryTagType(airport.flightCategory)"> {{ airport.flightCategory || 'N/A' }} </n-tag>
+                <n-tag size="small" :type="getFlightCategoryTagType(airport.flightCategory).type" :style="getFlightCategoryTagType(airport.flightCategory).style"> {{ airport.flightCategory || 'N/A' }} </n-tag>
               </template>
               <n-thing :title="`${airport.name} (${airport.icao})`">
                 <template #header>
@@ -362,10 +371,7 @@ onMounted(() => {
 
           <!-- Flight Category and Report Age Tags -->
           <div style="display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;">
-            <n-tag v-if="metarData.flightCategory" :type="metarData.flightCategory === 'VFR' ? 'success' :
-                               metarData.flightCategory === 'MVFR' ? 'info' :
-                               metarData.flightCategory === 'IFR' ? 'warning' :
-                               metarData.flightCategory === 'LIFR' ? 'error' : 'default'" size="small">
+            <n-tag v-if="metarData.flightCategory" v-bind="mainMetarTagProps" size="small">
               {{ metarData.flightCategory }}
             </n-tag>
             <n-tag v-if="metarData.reportAgeMinutes !== undefined" type="default" size="small" :bordered="false">
@@ -408,6 +414,9 @@ onMounted(() => {
               <n-descriptions-item label="Visibility">
                 {{ metarData.visibility }}
               </n-descriptions-item>
+              <n-descriptions-item label="Weather" v-if="metarData.weather">
+                {{ metarData.weather }}
+              </n-descriptions-item>
               <n-descriptions-item label="Clouds (AGL)">
                 <span v-html="formattedClouds"></span>
               </n-descriptions-item>
@@ -433,6 +442,7 @@ onMounted(() => {
               <div><strong>Time:</strong> <span>{{ metarData.observedTime }}</span></div>
               <div><strong>Wind:</strong> <span>{{ metarData.wind }}</span></div>
               <div><strong>Visibility:</strong> <span>{{ metarData.visibility }}</span></div>
+              <div v-if="metarData.weather"><strong>Weather:</strong> <span>{{ metarData.weather }}</span></div>
               <div><strong>Clouds (AGL)</strong> <span v-html="formattedClouds"></span></div>
               <div><strong>Temperature:</strong> <span>{{ metarData.temperature }}</span></div>
               <div><strong>Dewpoint:</strong> <span>{{ metarData.dewpoint }}</span></div>
@@ -498,7 +508,7 @@ li {
 }
 
 .header-logo {
-  height: 60px; /* Adjust size as needed (32 * 2.5) */
+  height: 50px; /* Adjust size as needed (32 * 2.5) */
   vertical-align: middle;
 }
 
