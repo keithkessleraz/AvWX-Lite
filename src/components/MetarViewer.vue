@@ -289,11 +289,12 @@ onMounted(() => {
               :disabled="isFetching"
               @input="icaoInput = $event.toUpperCase()"
               @keyup.enter="handleGetMetarClick"
-              :input-props="{ autocapitalize: 'characters' }"
+              :input-props="{
+                autocapitalize: 'characters', // For mobile virtual keyboards
+                autocorrect: 'off',
+                spellcheck: 'false'
+              }"
               aria-label="Enter Airport ICAO Code"
-              autocorrect="off"
-              autocapitalize="off"
-              spellcheck="false"
             >
               <template #suffix>
                 <n-button
