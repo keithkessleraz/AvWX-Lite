@@ -75,7 +75,7 @@ const formattedClouds = computed(() => {
     .replace(/ ft/g, "'") // Replace ' ft' with prime symbol
     .replace(/;/g, '') // Remove semicolons
     .replace(/ AGL/g, '') // Remove trailing AGL
-    .replace(/, /g, '<br>'); // Add line breaks
+    .replace(/' /g, "'<br>"); // Add line breaks after altitude prime + space
   return clouds;
 });
 
@@ -272,7 +272,6 @@ onMounted(() => {
       class="main-metar-card"
       :bordered="false"
       size="large"
-      style="max-width: 700px;"
     >
       <template #header>
         <n-space align="center" :wrap-item="false">
@@ -532,11 +531,15 @@ li {
 
 .main-metar-card {
   margin: 20px auto; /* Center on desktop */
+  max-width: 700px; /* Set max-width for desktop */
 }
 
 @media (max-width: 640px) {
+  /* Reduce external margins and ensure padding is included in width */
   .main-metar-card {
-    margin: 20px 10px; /* Apply mobile margins */
+    margin: 20px 10px; /* Reverted side margins */
+    box-sizing: border-box;
+    max-width: none; /* Remove desktop max-width on mobile */
   }
 
   /* Styling for the simple mobile list */

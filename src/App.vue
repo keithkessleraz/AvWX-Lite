@@ -20,13 +20,21 @@ import { NConfigProvider, NMessageProvider, NDialogProvider, NLoadingBarProvider
 
 <style>
 /* You can add global styles affecting the root App here if needed */
+/* Base styles for desktop */
 #app {
   max-width: 900px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 2rem; /* Default padding for larger screens */
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #2c3e50;
+}
+
+/* Reduce padding on smaller screens */
+@media (max-width: 640px) {
+  #app {
+    padding: 1rem 10px; /* Reduced vertical padding, minimal horizontal padding */
+  }
 }
 </style>
