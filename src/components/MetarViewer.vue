@@ -71,11 +71,12 @@ const isFetching = computed(() => isLoadingMetar.value || isLoadingLocation.valu
 // Computed property to format cloud layers
 const formattedClouds = computed(() => {
   if (!metarData.value?.ceilingAndClouds) return '';
-  // Replace ' ft AGL' with ', remove ';', replace ', ' with '<br>'
-  return metarData.value.ceilingAndClouds
-    .replace(/ ft AGL/g, "'")
+  let clouds = metarData.value.ceilingAndClouds
+    .replace(/ ft/g, "'") // Replace ' ft' with prime symbol
     .replace(/;/g, '') // Remove semicolons
+    .replace(/ AGL/g, '') // Remove trailing AGL
     .replace(/, /g, '<br>'); // Add line breaks
+  return clouds;
 });
 
 // --- Theme Overrides for Naive UI ---
@@ -267,184 +268,182 @@ onMounted(() => {
 
 <template>
   <n-config-provider :theme-overrides="themeOverrides">
-    <div class="metar-viewer-wrapper">
-      <n-card 
-        class="main-metar-card"
-        :bordered="false"
-        size="large"
-        style="max-width: 700px; margin: 20px auto;"
-      >
-        <template #header>
-          <n-space align="center" :wrap-item="false">
-            <img :src="WxVectorLogo" alt="WX Vector Logo" class="header-logo" />
-            <span class="header-title">WX Vector</span>
-          </n-space>
-        </template>
-        <n-space vertical size="large">
-          <n-spin :show="isFetching">
-            <n-input-group>
-              <n-input
-                v-model:value="icaoInput"
-                placeholder="e.g., KLAX, EGLL"
-                clearable
-                :disabled="isFetching"
-                @input="icaoInput = $event.toUpperCase()"
-                @keyup.enter="handleGetMetarClick"
-                :input-props="{ autocapitalize: 'characters' }"
-                aria-label="Enter Airport ICAO Code"
-                autocorrect="off"
-                autocapitalize="off"
-                spellcheck="false"
-              >
-                <template #suffix>
-                  <n-button
-                    text
-                    style="font-size: 18px; margin-right: 5px;"
-                    :loading="isLoadingLocation"
-                    @click="getLocationAndFindNearby"
-                    :disabled="isFetching"
-                    title="Use My Location"
-                    aria-label="Use My Location"
-                  >
-                    <template #icon>
-                      <n-icon :component="LocationIcon" />
-                    </template>
-                  </n-button>
-                </template>
-              </n-input>
-              <n-button
-                type="primary"
-                @click="handleGetMetarClick"
-                :loading="isLoadingMetar"
-                :disabled="isFetching || !icaoInput.trim()"
-              >
-                Get METAR
-              </n-button>
-            </n-input-group>
-          </n-spin>
-
-          <n-alert v-if="errorMessage && !isFetching && !metarData && !showNearbyAirports" title="Error" type="error" closable @close="errorMessage = null">
-            {{ errorMessage }}
-          </n-alert>
-
-          <div v-if="showNearbyAirports && nearbyAirports.length > 0">
-            <n-divider title-placement="left">Nearby Airports (Closest {{ nearbyAirports.length }})</n-divider>
-            <n-list hoverable clickable bordered>
-              <n-list-item v-for="airport in nearbyAirports" :key="airport.icao" style="cursor: pointer;" @click="handleAirportSelect(airport.icao)">
-                <template #prefix>
-                  <n-tag size="small" :bordered="false" :type="getFlightCategoryTagType(airport.flightCategory)"> {{ airport.flightCategory || 'N/A' }} </n-tag>
-                </template>
-                <n-thing :title="`${airport.name} (${airport.icao})`">
-                  <template #header>
-                    <span style="font-size: 0.9em;">{{ airport.name }} ({{ airport.icao }})</span>
-                  </template>
-                  <template #description>
-                    <span style="font-size: 0.9em;">
-                      {{ airport.position.distance.miles.toFixed(1) }} miles away - {{ airport.city }}, {{ airport.state?.name || airport.country.code }}
-                    </span>
-                  </template>
-                </n-thing>
-              </n-list-item>
-            </n-list>
-          </div>
-          <div v-else-if="showNearbyAirports && nearbyAirports.length === 0 && !isLoadingLocation">
-            <n-alert type="info" title="No Nearby Airports Found" :bordered="false">
-              Could not find any airports within 50 miles of your location.
-            </n-alert>
-          </div>
-
-          <div v-else-if="metarData && !isFetching">
-            <!-- Use a <p> tag for the header instead of n-divider -->
-            <p style="display: flex; align-items: center; font-size: 1.44em; gap: 6px; margin-bottom: 10px; font-weight: 500; color: #21367c;">
-              <n-icon :component="AirplaneIcon" size="26" />
-              <span>{{ metarData.airportName || 'Unknown Station' }} ({{ metarData.icao }})</span>
-            </p>
-
-            <!-- Flight Category and Report Age Tags -->
-            <div style="display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;">
-              <n-tag v-if="metarData.flightCategory" :type="metarData.flightCategory === 'VFR' ? 'success' :
-                                 metarData.flightCategory === 'MVFR' ? 'info' :
-                                 metarData.flightCategory === 'IFR' ? 'warning' :
-                                 metarData.flightCategory === 'LIFR' ? 'error' : 'default'" size="small">
-                {{ metarData.flightCategory }}
-              </n-tag>
-              <n-tag v-if="metarData.reportAgeMinutes !== undefined" type="default" size="small" :bordered="false">
-                Reported {{ metarData.reportAgeMinutes }} mins ago
-              </n-tag>
-            </div>
-
-            <n-divider style="margin-top: 5px; margin-bottom: 10px;" />
-
-            <div>
-              <n-card
-                v-if="metarData.rawText"
-                size="small"
-                embedded
-                class="raw-metar-card"
-              >
-                <n-code
-                  :hljs="undefined"
-                  :code="metarData.rawText"
-                  word-wrap
-                ></n-code>
-              </n-card>
-            </div>
-
-            <template v-if="!isMobile">
-              <n-descriptions
-                v-if="metarData"
-                label-placement="left"
-                bordered
-                :column="1"
-                size="medium"
-                class="metar-details-grid"
-              >
-                <n-descriptions-item label="Time">
-                  {{ metarData.observedTime }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Wind">
-                  {{ metarData.wind }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Visibility">
-                  {{ metarData.visibility }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Clouds (AGL)">
-                  <span v-html="formattedClouds"></span>
-                </n-descriptions-item>
-                <n-descriptions-item label="Temperature">
-                  {{ metarData.temperature }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Dewpoint">
-                  {{ metarData.dewpoint }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Altimeter">
-                  {{ metarData.altimeter }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Humidity">
-                  {{ metarData.humidity }}
-                </n-descriptions-item>
-                <n-descriptions-item label="Density Altitude">
-                  {{ metarData.densityAltitude }}
-                </n-descriptions-item>
-              </n-descriptions>
-            </template>
-            <template v-else>
-              <div v-if="metarData" class="mobile-metar-details">
-                <div><strong>Time:</strong> <span>{{ metarData.observedTime }}</span></div>
-                <div><strong>Wind:</strong> <span>{{ metarData.wind }}</span></div>
-                <div><strong>Visibility:</strong> <span>{{ metarData.visibility }}</span></div>
-                <div><strong>Clouds (AGL)</strong> <span v-html="formattedClouds"></span></div>
-                <div><strong>Temperature:</strong> <span>{{ metarData.temperature }}</span></div>
-                <div><strong>Dewpoint:</strong> <span>{{ metarData.dewpoint }}</span></div>
-                <div><strong>Altimeter:</strong> <span>{{ metarData.altimeter }}</span></div>
-                <div><strong>Humidity:</strong> <span>{{ metarData.humidity }}</span></div>
-                <div><strong>Density Altitude:</strong> <span>{{ metarData.densityAltitude }}</span></div>
-              </div>
-            </template>
-          </div>
+    <n-card
+      class="main-metar-card"
+      :bordered="false"
+      size="large"
+      style="max-width: 700px;"
+    >
+      <template #header>
+        <n-space align="center" :wrap-item="false">
+          <img :src="WxVectorLogo" alt="WX Vector Logo" class="header-logo" />
+          <span class="header-title">WX Vector</span>
         </n-space>
-      </n-card>
-    </div>
+      </template>
+      <n-space vertical size="large">
+        <n-spin :show="isFetching">
+          <n-input-group>
+            <n-input
+              v-model:value="icaoInput"
+              placeholder="e.g., KLAX, EGLL"
+              clearable
+              :disabled="isFetching"
+              @input="icaoInput = $event.toUpperCase()"
+              @keyup.enter="handleGetMetarClick"
+              :input-props="{ autocapitalize: 'characters' }"
+              aria-label="Enter Airport ICAO Code"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+            >
+              <template #suffix>
+                <n-button
+                  text
+                  style="font-size: 18px; margin-right: 5px;"
+                  :loading="isLoadingLocation"
+                  @click="getLocationAndFindNearby"
+                  :disabled="isFetching"
+                  title="Use My Location"
+                  aria-label="Use My Location"
+                >
+                  <template #icon>
+                    <n-icon :component="LocationIcon" />
+                  </template>
+                </n-button>
+              </template>
+            </n-input>
+            <n-button
+              type="primary"
+              @click="handleGetMetarClick"
+              :loading="isLoadingMetar"
+              :disabled="isFetching || !icaoInput.trim()"
+            >
+              Get METAR
+            </n-button>
+          </n-input-group>
+        </n-spin>
+
+        <n-alert v-if="errorMessage && !isFetching && !metarData && !showNearbyAirports" title="Error" type="error" closable @close="errorMessage = null">
+          {{ errorMessage }}
+        </n-alert>
+
+        <div v-if="showNearbyAirports && nearbyAirports.length > 0">
+          <n-divider title-placement="left">Nearby Airports (Closest {{ nearbyAirports.length }})</n-divider>
+          <n-list hoverable clickable bordered>
+            <n-list-item v-for="airport in nearbyAirports" :key="airport.icao" style="cursor: pointer;" @click="handleAirportSelect(airport.icao)">
+              <template #prefix>
+                <n-tag size="small" :bordered="false" :type="getFlightCategoryTagType(airport.flightCategory)"> {{ airport.flightCategory || 'N/A' }} </n-tag>
+              </template>
+              <n-thing :title="`${airport.name} (${airport.icao})`">
+                <template #header>
+                  <span style="font-size: 0.9em;">{{ airport.name }} ({{ airport.icao }})</span>
+                </template>
+                <template #description>
+                  <span style="font-size: 0.9em;">
+                    {{ airport.position.distance.miles.toFixed(1) }} miles away - {{ airport.city }}, {{ airport.state?.name || airport.country.code }}
+                  </span>
+                </template>
+              </n-thing>
+            </n-list-item>
+          </n-list>
+        </div>
+        <div v-else-if="showNearbyAirports && nearbyAirports.length === 0 && !isLoadingLocation">
+          <n-alert type="info" title="No Nearby Airports Found" :bordered="false">
+            Could not find any airports within 50 miles of your location.
+          </n-alert>
+        </div>
+
+        <div v-else-if="metarData && !isFetching">
+          <!-- Use a <p> tag for the header instead of n-divider -->
+          <p style="display: flex; align-items: center; font-size: 1.44em; gap: 6px; margin-bottom: 10px; font-weight: 500; color: #21367c;">
+            <n-icon :component="AirplaneIcon" size="26" />
+            <span>{{ metarData.airportName || 'Unknown Station' }} ({{ metarData.icao }})</span>
+          </p>
+
+          <!-- Flight Category and Report Age Tags -->
+          <div style="display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap;">
+            <n-tag v-if="metarData.flightCategory" :type="metarData.flightCategory === 'VFR' ? 'success' :
+                               metarData.flightCategory === 'MVFR' ? 'info' :
+                               metarData.flightCategory === 'IFR' ? 'warning' :
+                               metarData.flightCategory === 'LIFR' ? 'error' : 'default'" size="small">
+              {{ metarData.flightCategory }}
+            </n-tag>
+            <n-tag v-if="metarData.reportAgeMinutes !== undefined" type="default" size="small" :bordered="false">
+              Reported {{ metarData.reportAgeMinutes }} mins ago
+            </n-tag>
+          </div>
+
+          <n-divider style="margin-top: 5px; margin-bottom: 10px;" />
+
+          <div>
+            <n-card
+              v-if="metarData.rawText"
+              size="small"
+              embedded
+              class="raw-metar-card"
+            >
+              <n-code
+                :hljs="undefined"
+                :code="metarData.rawText"
+                word-wrap
+              ></n-code>
+            </n-card>
+          </div>
+
+          <template v-if="!isMobile">
+            <n-descriptions
+              v-if="metarData"
+              label-placement="left"
+              bordered
+              :column="1"
+              size="medium"
+              class="metar-details-grid"
+            >
+              <n-descriptions-item label="Time">
+                {{ metarData.observedTime }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Wind">
+                {{ metarData.wind }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Visibility">
+                {{ metarData.visibility }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Clouds (AGL)">
+                <span v-html="formattedClouds"></span>
+              </n-descriptions-item>
+              <n-descriptions-item label="Temperature">
+                {{ metarData.temperature }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Dewpoint">
+                {{ metarData.dewpoint }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Altimeter">
+                {{ metarData.altimeter }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Humidity">
+                {{ metarData.humidity }}
+              </n-descriptions-item>
+              <n-descriptions-item label="Density Altitude">
+                {{ metarData.densityAltitude }}
+              </n-descriptions-item>
+            </n-descriptions>
+          </template>
+          <template v-else>
+            <div v-if="metarData" class="mobile-metar-details">
+              <div><strong>Time:</strong> <span>{{ metarData.observedTime }}</span></div>
+              <div><strong>Wind:</strong> <span>{{ metarData.wind }}</span></div>
+              <div><strong>Visibility:</strong> <span>{{ metarData.visibility }}</span></div>
+              <div><strong>Clouds (AGL)</strong> <span v-html="formattedClouds"></span></div>
+              <div><strong>Temperature:</strong> <span>{{ metarData.temperature }}</span></div>
+              <div><strong>Dewpoint:</strong> <span>{{ metarData.dewpoint }}</span></div>
+              <div><strong>Altimeter:</strong> <span>{{ metarData.altimeter }}</span></div>
+              <div><strong>Humidity:</strong> <span>{{ metarData.humidity }}</span></div>
+              <div><strong>Density Altitude:</strong> <span>{{ metarData.densityAltitude }}</span></div>
+            </div>
+          </template>
+        </div>
+      </n-space>
+    </n-card>
   </n-config-provider>
 </template>
 
@@ -531,29 +530,13 @@ li {
   margin-left: auto; /* Push button to the right */
 }
 
+.main-metar-card {
+  margin: 20px auto; /* Center on desktop */
+}
+
 @media (max-width: 640px) {
-  .input-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .metar-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 5px;
-  }
-
-  /* Apply padding to the wrapper div on mobile to control spacing */
-  .metar-viewer-wrapper {
-    width: 100%; /* Ensure wrapper takes full width */
-    box-sizing: border-box; /* Include padding in width calculation */
-    padding: 0 10px; /* Add horizontal padding outside the card */
-  }
-
-  /* Force card margins to zero on mobile, let wrapper handle spacing */
   .main-metar-card {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
+    margin: 20px 10px; /* Apply mobile margins */
   }
 
   /* Styling for the simple mobile list */
